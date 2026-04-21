@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>snip.ly — URL Shortener Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --bg-secondary: #f5f5f4;
+    --bg-info: #e6f1fb;
+    --bg-success: #eaf3de;
+    --text: #1a1a18;
+    --text-secondary: #6b6b67;
+    --text-tertiary: #9b9b97;
+    --text-info: #185fa5;
+    --text-success: #3b6d11;
+    --border: rgba(0,0,0,0.12);
+    --border-md: rgba(0,0,0,0.22);
+    --r-md: 8px;
+    --r-lg: 12px;
+    --font: system-ui, -apple-system, sans-serif;
+    --mono: 'Courier New', monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --bg-secondary: #252523;
+      --bg-info: #042c53;
+      --bg-success: #173404;
+      --text: #f0efea;
+      --text-secondary: #a0a09a;
+      --text-tertiary: #6b6b67;
+      --text-info: #85b7eb;
+      --text-success: #97c459;
+      --border: rgba(255,255,255,0.12);
+      --border-md: rgba(255,255,255,0.22);
+    }
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg-secondary);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  .app { max-width: 860px; margin: 0 auto; }
+
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 34px; height: 34px; background: var(--text); border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo-icon svg { width: 18px; height: 18px; }
+  .logo-text { font-size: 15px; font-weight: 500; letter-spacing: -0.3px; }
+  .logo-sub { font-size: 12px; color: var(--text-secondary); }
+  .badge-live { font-size: 10px; padding: 3px 9px; border-radius: 20px; background: var(--bg-success); color: var(--text-success); font-weight: 500; letter-spacing: 0.3px; }
+
+  .shorten-box { background: var(--bg); border: 0.5px solid var(--border-md); border-radius: var(--r-lg); padding: 1.25rem; margin-bottom: 1.5rem; }
+  .shorten-row { display: flex; gap: 8px; }
+  .shorten-row input { flex: 1; font-size: 13px; font-family: var(--mono); background: var(--bg-secondary); border: 0.5px solid var(--border); border-radius: var(--r-md); padding: 0 12px; height: 38px; color: var(--text); outline: none; transition: border-color 0.15s; }
+  .shorten-row input:focus { border-color: var(--border-md); }
+  .btn-shorten { height: 38px; padding: 0 18px; font-size: 13px; font-weight: 500; background: var(--text); color: var(--bg); border: none; border-radius: var(--r-md); cursor: pointer; white-space: nowrap; transition: opacity 0.15s; }
+  .btn-shorten:hover { opacity: 0.85; }
+  .result-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 12px; background: var(--bg-secondary); border-radius: var(--r-md); }
+  .short-link { font-size: 13px; font-family: var(--mono); color: var(--text-info); flex: 1; }
+  .btn-copy { font-size: 11px; padding: 4px 10px; border-radius: 5px; border: 0.5px solid var(--border-md); background: transparent; color: var(--text-secondary); cursor: pointer; transition: background 0.12s; }
+  .btn-copy:hover { background: var(--bg-secondary); }
+
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+  .metric { background: var(--bg-secondary); border-radius: var(--r-md); padding: 13px 15px; }
+  .metric-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; }
+  .metric-value { font-size: 23px; font-weight: 500; letter-spacing: -0.5px; }
+  .metric-delta { font-size: 11px; color: var(--text-success); margin-top: 3px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1.5rem; }
+  .panel { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--r-lg); padding: 1rem 1.25rem; }
+  .panel-title { font-size: 11px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
+
+  .url-table { width: 100%; border-collapse: collapse; }
+  .url-table th { font-size: 11px; color: var(--text-tertiary); font-weight: 400; text-align: left; padding: 0 0 8px; border-bottom: 0.5px solid var(--border); }
+  .url-table td { font-size: 12px; padding: 8px 0; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
+  .url-table tr:last-child td { border-bottom: none; }
+  .url-table tbody tr { cursor: pointer; transition: background 0.1s; }
+  .url-table tbody tr:hover td { background: var(--bg-secondary); }
+  .short-code { font-family: var(--mono); font-size: 12px; color: var(--text-info); }
+  .orig-url { color: var(--text-secondary); font-size: 11px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-wrap { display: flex; align-items: center; gap: 6px; }
+  .bar-bg { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .bar-fill { height: 4px; background: var(--text); border-radius: 2px; transition: width 0.5s ease; }
+  .click-count { font-weight: 500; font-size: 12px; min-width: 28px; text-align: right; }
+
+  .ref-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 0.5px solid var(--border); }
+  .ref-row:last-child { border-bottom: none; }
+  .ref-source { font-size: 12px; display: flex; align-items: center; gap: 7px; }
+  .ref-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .ref-pct { font-size: 12px; color: var(--text-secondary); }
+
+  .detail-panel { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--r-lg); padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+  .detail-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+  .detail-url { font-family: var(--mono); font-size: 12px; color: var(--text-info); margin-top: 3px; }
+  .detail-orig { font-size: 11px; color: var(--text-secondary); margin-top: 3px; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag { font-size: 10px; padding: 3px 9px; border-radius: 20px; border: 0.5px solid var(--border-md); color: var(--text-secondary); white-space: nowrap; }
+  .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+
+  .chart-wrap { position: relative; width: 100%; height: 145px; }
+  .chart-wrap-lg { position: relative; width: 100%; height: 160px; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: var(--bg); font-size: 12px; padding: 9px 16px; border-radius: var(--r-md); opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 100; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 600px) {
+    body { padding: 1rem; }
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .three-col { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4l4 4-4 4M8 16l-4-4 4-4" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-text">snip.ly</div>
+        <div class="logo-sub">URL Shortener Microservice</div>
+      </div>
+    </div>
+    <span class="badge-live">LIVE</span>
+  </div>
+
+  <div class="shorten-box">
+    <div class="shorten-row">
+      <input type="text" id="urlInput" placeholder="https://your-long-url.com/goes/here" />
+      <button class="btn-shorten" onclick="shortenUrl()">Shorten URL</button>
+    </div>
+    <div id="resultRow" style="display:none;" class="result-row">
+      <span class="short-link" id="shortLinkDisplay"></span>
+      <button class="btn-copy" onclick="copyLink()">Copy</button>
+    </div>
+  </div>
+
+  <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Total clicks</div>
+      <div class="metric-value" id="totalClicks">0</div>
+      <div class="metric-delta" id="totalDelta"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Active links</div>
+      <div class="metric-value" id="totalLinks">0</div>
+      <div class="metric-delta"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Avg CTR</div>
+      <div class="metric-value" id="avgCTR">0</div>
+      <div class="metric-delta" id="ctrDelta"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Top referrer</div>
+      <div class="metric-value" style="font-size:14px;" id="topRef">—</div>
+      <div class="metric-delta"></div>
+    </div>
+  </div>
+
+  <div id="detailPanel" class="detail-panel" style="display:none;">
+    <div class="detail-header">
+      <div>
+        <div class="panel-title">Link detail</div>
+        <div class="detail-url" id="detailCode"></div>
+        <div class="detail-orig" id="detailOrig"></div>
+      </div>
+      <span class="tag" id="detailAge"></span>
+    </div>
+    <div class="three-col">
+      <div class="metric"><div class="metric-label">Clicks</div><div class="metric-value" id="detailClicks">0</div></div>
+      <div class="metric"><div class="metric-label">Unique</div><div class="metric-value" id="detailUnique">0</div></div>
+      <div class="metric"><div class="metric-label">Today</div><div class="metric-value" id="detailToday">0</div></div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="detailChart" role="img" aria-label="Click trend for selected link over past 7 days"></canvas>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-title">Recent links</div>
+      <table class="url-table">
+        <thead><tr><th>Short</th><th>Destination</th><th style="text-align:right;">Clicks</th></tr></thead>
+        <tbody id="urlTableBody"></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Traffic over 7 days</div>
+      <div class="chart-wrap-lg">
+        <canvas id="trafficChart" role="img" aria-label="Bar chart showing total daily clicks over past 7 days"></canvas>
+      </div>
+      <div style="margin-top:14px;">
+        <div class="panel-title">Top referrers</div>
+        <div id="refList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied to clipboard</div>
+
+<script>
+const BASE = 'snip.ly/';
+const REFCOLORS = ['#3266ad','#1D9E75','#BA7517','#D4537E','#533AB7'];
+
+const seed = [
+  { code: 'x7Kp2', orig: 'https://github.com/glakshya20/har-cnn-lstm', clicks: 342, unique: 211, today: 28, created: '3d ago', daily: [22,18,41,55,38,60,28], refs: {GitHub:48,LinkedIn:31,Twitter:13,Direct:8} },
+  { code: 'mR9nQ', orig: 'https://docs.anthropic.com/api/getting-started', clicks: 187, unique: 134, today: 14, created: '6d ago', daily: [15,22,30,18,25,35,14], refs: {LinkedIn:42,Direct:29,Reddit:18,Twitter:11} },
+  { code: 'Lw4jZ', orig: 'https://arxiv.org/abs/2301.00234', clicks: 95, unique: 72, today: 9, created: '1d ago', daily: [0,0,0,0,0,0,9], refs: {Twitter:55,Direct:30,LinkedIn:15} },
+  { code: 'qB6tY', orig: 'https://leetcode.com/problems/hard-set/', clicks: 61, unique: 48, today: 5, created: '5d ago', daily: [8,10,14,9,7,8,5], refs: {Direct:60,LinkedIn:25,Twitter:15} },
+  { code: 'nC3vW', orig: 'https://internshala.com/internships/machine-learning', clicks: 44, unique: 39, today: 3, created: '2d ago', daily: [0,0,12,15,14,3,3], refs: {LinkedIn:70,Direct:30} }
+];
+
+let urls = JSON.parse(JSON.stringify(seed));
+let trafficChart = null;
+let detailChart = null;
+let selectedIdx = null;
+
+function randCode(n=6) {
+  const c = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  return Array.from({length:n},()=>c[Math.floor(Math.random()*c.length)]).join('');
+}
+
+function getDays() {
+  const d = [];
+  for(let i=6;i>=0;i--) {
+    const dt = new Date(); dt.setDate(dt.getDate()-i);
+    d.push(dt.toLocaleDateString('en',{weekday:'short'}));
+  }
+  return d;
+}
+
+function shortenUrl() {
+  const input = document.getElementById('urlInput');
+  const url = input.value.trim();
+  if(!url || !url.startsWith('http')) { input.focus(); return; }
+  const code = randCode();
+  urls.unshift({ code, orig: url, clicks: 0, unique: 0, today: 0, created: 'just now', daily: Array(7).fill(0), refs: {} });
+  document.getElementById('shortLinkDisplay').textContent = BASE + code;
+  document.getElementById('resultRow').style.display = 'flex';
+  input.value = '';
+  render();
+}
+
+function copyLink() {
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+function simulateClick() {
+  if(!urls.length) return;
+  const idx = Math.floor(Math.random() * Math.min(urls.length, 5));
+  urls[idx].clicks++;
+  urls[idx].daily[6]++;
+  if(Math.random() > 0.4) urls[idx].unique++;
+  urls[idx].today++;
+  const rks = Object.keys(urls[idx].refs);
+  if(rks.length) urls[idx].refs[rks[Math.floor(Math.random()*rks.length)]]++;
+  render();
+  if(selectedIdx === idx) updateDetail(idx);
+}
+
+function render() {
+  const totalClicks = urls.reduce((s,u) => s+u.clicks, 0);
+  document.getElementById('totalClicks').textContent = totalClicks.toLocaleString();
+  document.getElementById('totalLinks').textContent = urls.length;
+  document.getElementById('avgCTR').textContent = urls.length ? Math.round(totalClicks/urls.length) : 0;
+  document.getElementById('totalDelta').textContent = totalClicks > 0 ? '+' + urls.reduce((s,u)=>s+u.today,0) + ' today' : '';
+  document.getElementById('ctrDelta').textContent = 'avg clicks/link';
+
+  const allRefs = {};
+  urls.forEach(u => Object.entries(u.refs).forEach(([k,v]) => { allRefs[k] = (allRefs[k]||0)+v; }));
+  const topRef = Object.entries(allRefs).sort((a,b) => b[1]-a[1])[0];
+  document.getElementById('topRef').textContent = topRef ? topRef[0] : '—';
+
+  const maxC = Math.max(...urls.map(u=>u.clicks), 1);
+  document.getElementById('urlTableBody').innerHTML = urls.map((u,i) => `
+    <tr onclick="showDetail(${i},true)" style="${selectedIdx===i?'background:var(--bg-secondary);':''}">
+      <td><span class="short-code">${BASE}${u.code}</span></td>
+      <td><div class="orig-url">${u.orig.replace(/https?:\/\//,'')}</div></td>
+      <td><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(u.clicks/maxC*100)}%"></div></div><span class="click-count">${u.clicks}</span></div></td>
+    </tr>`).join('');
+
+  const totalRef = Object.values(allRefs).reduce((s,v)=>s+v,0)||1;
+  const topRefs = Object.entries(allRefs).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  document.getElementById('refList').innerHTML = topRefs.map(([k,v],i) => `
+    <div class="ref-row">
+      <span class="ref-source"><span class="ref-dot" style="background:${REFCOLORS[i%5]}"></span>${k}</span>
+      <span class="ref-pct">${Math.round(v/totalRef*100)}%</span>
+    </div>`).join('');
+
+  const dailyTotals = Array(7).fill(0);
+  urls.forEach(u => u.daily.forEach((v,i) => dailyTotals[i]+=v));
+  const days = getDays();
+
+  if(trafficChart) trafficChart.destroy();
+  trafficChart = new Chart(document.getElementById('trafficChart'), {
+    type: 'bar',
+    data: { labels: days, datasets: [{ label:'Clicks', data: dailyTotals, backgroundColor:'#3266ad', borderRadius:3 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{
+      x:{grid:{display:false},ticks:{font:{size:11},color:'#888'}},
+      y:{grid:{color:'rgba(128,128,128,0.1)'},ticks:{font:{size:10},color:'#888',maxTicksLimit:4}}
+    }}
+  });
+}
+
+function updateDetail(idx) {
+  const u = urls[idx];
+  document.getElementById('detailClicks').textContent = u.clicks;
+  document.getElementById('detailUnique').textContent = u.unique;
+  document.getElementById('detailToday').textContent = u.today;
+  if(detailChart) {
+    detailChart.data.datasets[0].data = u.daily;
+    detailChart.update();
+  }
+}
+
+function showDetail(idx, toggle) {
+  if(toggle && selectedIdx === idx) {
+    selectedIdx = null;
+    document.getElementById('detailPanel').style.display = 'none';
+    render(); return;
+  }
+  selectedIdx = idx;
+  const u = urls[idx];
+  document.getElementById('detailPanel').style.display = 'block';
+  document.getElementById('detailCode').textContent = BASE + u.code;
+  document.getElementById('detailOrig').textContent = u.orig;
+  document.getElementById('detailAge').textContent = u.created;
+  document.getElementById('detailClicks').textContent = u.clicks;
+  document.getElementById('detailUnique').textContent = u.unique;
+  document.getElementById('detailToday').textContent = u.today;
+  if(detailChart) detailChart.destroy();
+  detailChart = new Chart(document.getElementById('detailChart'), {
+    type: 'line',
+    data: { labels: getDays(), datasets: [{ label:'Clicks', data: u.daily, borderColor:'#3266ad', backgroundColor:'rgba(50,102,173,0.08)', tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#3266ad' }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{
+      x:{grid:{display:false},ticks:{font:{size:11},color:'#888'}},
+      y:{grid:{color:'rgba(128,128,128,0.1)'},ticks:{font:{size:10},color:'#888',maxTicksLimit:4},min:0}
+    }}
+  });
+  render();
+}
+
+render();
+setInterval(simulateClick, 2200);
+</script>
+</body>
+</html>
