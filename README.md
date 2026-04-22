@@ -1,5 +1,5 @@
 # snip.ly — URL Shortener Microservice
-
+Deployed @ https://snip-ly-production-d807.up.railway.app/docs
 > **Shorten URLs. Track every click. Ship in minutes.**
 
 A production-grade URL shortener built as a single FastAPI microservice backed by Redis.
